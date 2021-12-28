@@ -1,0 +1,34 @@
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: good-morning-good-afternoon
+spec:
+  tasks:
+    - name: echo-good-morning
+      taskSpec:
+        steps:
+          - name: echo
+            image: ubuntu
+            script: |
+              #!/usr/bin/env bash
+              echo "Good Morning!"
+    - name: echo-good-afternoon
+      taskSpec:
+        steps:
+          - name: echo
+            image: ubuntu
+            script: |
+              #!/usr/bin/env bash
+              echo "Good Afternoon!"
+      runAfter:
+      - echo-good-morning
+---
+apiVersion: tekton.dev/v1beta1
+kind: Run
+metadata:
+  generateName: pipeline-in-pod-run-
+spec:
+  ref:
+    apiVersion: tekton.dev/v1alpha1
+    kind: PipelineInPod
+    name: good-morning-good-afternoon
