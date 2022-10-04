@@ -1,0 +1,112 @@
+apiVersion: tekton.dev/v1alpha1
+kind: Workflow
+metadata:
+  name: ci-workflow
+spec:
+  pipeline:
+    spec:
+      workspaces:
+      - name: source
+      - name: github-app-private-key
+      params:
+      - name: repo-full-name
+      - name: revision
+      tasks:
+      - name: create-check-runs
+        taskRef:
+          name: update-github-check-run
+        params:
+        - name: repo-full-name
+          value: $(params.repo-full-name)
+          # TODO: shouldn't need to add type
+          type: string
+        - name: git-sha
+          value: $(params.revision)
+          type: string
+        - name: status
+          value: "in_progress"
+          type: string
+        - name: check-run-name
+          value: ci
+          type: string
+        - name: externalid
+          value: $(context.pipelineRun.name)
+          type: string
+        workspaces:
+        - name: github-app-private-key
+          workspace: github-app-private-key
+      - name: clone
+        taskRef:
+          name: git-clone
+          # TODO: why does this get truncated?
+          bundle: gcr.io/tekton-releases/catalog/upstream/git-clone:0.7
+        workspaces:
+        - name: output
+          workspace: source
+        params:
+        - name: url
+          value: https://github.com/$(params.repo-full-name)
+          type: string
+        - name: revision
+          value: $(params.revision)
+          type: string
+      - name: unit-tests
+        taskRef:
+          name: unit-tests
+        workspaces:
+        - name: source
+          workspace: source
+        runAfter:
+        - clone
+      finally:
+      - name: post-github-status
+        taskRef:
+          name: update-github-check-run
+        params:
+        - name: status
+          value: completed
+          type: string
+        - name: conclusion
+          value: $(tasks.unit-tests.status)
+          type: string
+        - name: repo-full-name
+          value: $(params.repo-full-name)
+          type: string
+        - name: git-sha
+          value: $(params.revision)
+          type: string
+        - name: check-run-name
+          value: ci
+          type: string
+        - name: externalid
+          value: $(context.pipelineRun.name)
+          type: string
+        workspaces:
+        - name: github-app-private-key
+          workspace: github-app-private-key
+  params:
+  # TODO: these shouldn't be defaults (at least not revision)
+  # They should come from bindings
+  - name: repo-full-name
+    default: lbernick/pipeline
+  - name: revision
+    default: 0dd9f9719177054bdf60928ce9b4aab4b85af5bd
+  # TODO: secrets doesn't work yet?
+  # TODO: serviceaccountnames
+  # TODO: serviceaccount name gets turned into "default"
+  serviceAccountName: container-registry-sa
+  workspaces:
+  # - name: github-app-private-key
+  #   # does this end up being a workflows secret or a pipelines secret?
+  #   secret:
+  #     secretName: github-app-key
+  - name: source
+    volumeClaimTemplate:
+      spec:
+        accessModes:
+        - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi
+
+  

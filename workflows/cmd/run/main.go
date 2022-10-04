@@ -1,19 +1,13 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
-	"github.com/tektoncd/experimental/workflows/pkg/client/clientset/versioned/scheme"
-	"io"
 	"io/ioutil"
-	"k8s.io/apimachinery/pkg/runtime"
+
+	"github.com/tektoncd/experimental/workflows/parse"
 	"sigs.k8s.io/yaml"
 
 	"github.com/spf13/cobra"
-	"k8s.io/apimachinery/pkg/runtime/serializer"
-	"k8s.io/apimachinery/pkg/runtime/serializer/streaming"
-
-	"github.com/tektoncd/experimental/workflows/pkg/apis/workflows/v1alpha1"
 )
 
 func main() {
@@ -44,25 +38,15 @@ func runWorkflow(fileName string) error {
 		fmt.Printf("error reading file: %+v", err)
 	}
 
-	sch := runtime.NewScheme()
-	_ = scheme.AddToScheme(sch)
-
-	decoder := streaming.NewDecoder(ioutil.NopCloser(bytes.NewReader(file)), serializer.NewCodecFactory(sch).UniversalDecoder())
-	w := new(v1alpha1.Workflow)
-	_, _, err = decoder.Decode(nil, w)
-	if err != nil {
-		if err != io.EOF {
-			return fmt.Errorf("error decoding workflow: %v", err)
-		}
-	}
+	w := parse.ParseWorkflowOrDie(file)
 
 	pr, err := w.ToPipelineRun()
 	if err != nil {
-		return fmt.Errorf("error workflow to pipelinerun: %w", err)
+		return fmt.Errorf("error converting workflow to pipelinerun: %w", err)
 	}
 	pry, err := yaml.Marshal(pr)
 	if err != nil {
-		return fmt.Errorf("error convering pipelinerun to yaml: %w", err)
+		return fmt.Errorf("error converting pipelinerun to yaml: %w", err)
 	}
 	fmt.Printf("%s", pry)
 	return nil

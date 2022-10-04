@@ -1,0 +1,74 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: update-github-check-run
+spec:
+  params:
+  - name: externalid
+    default: ""
+  - name: repo-full-name
+  - name: git-sha
+  - name: status
+    default: "in_progress"
+  - name: conclusion 
+    description: "Allowed values are 'Succeeded', 'Failed', and 'None'"
+    default: None
+  - name: check-run-name
+  workspaces:
+  - name: github-app-private-key
+  steps:
+  - name: generate-token
+    image: us-east1-docker.pkg.dev/tekton-interns/leebernick/dogfood/jwt
+    args:
+    - -p
+    - $(workspaces.github-app-private-key.path)/private-key.pem
+    - -c
+    - /github-app-token/token.txt
+    volumeMounts:
+    - mountPath: /github-app-token
+      name: token
+  - name: update-check-run
+    image: curlimages/curl:latest
+    command:
+    - sh
+    args:
+    - -ce
+    - |
+      set -e
+      TOKEN=$(cat /github-app-token/token.txt)
+      NOW=$(date +"%Y-%m-%dT%TZ")
+      if [ "$(params.conclusion)" == "Succeeded" ]
+      then
+        CONCLUSION="success"
+      elif [ "$(params.conclusion)" == "Failed" ]
+      then
+        CONCLUSION="failure"
+      else
+        CONCLUSION="skipped"
+      fi
+      if [ "$(params.status)" == "completed" ]
+      then
+        BODY="{\"name\":\"$(params.check-run-name)\",\"head_sha\":\"$(params.git-sha)\",\"conclusion\":\"$CONCLUSION\",\"completed_at\":\"$NOW\",\"status\":\"$(params.status)\",\"external_id\":\"$(params.externalid)\"}"
+      else
+        BODY='{"name":"$(params.check-run-name)","head_sha":"$(params.git-sha)","status":"$(params.status)","external_id":"$(params.externalid)"}'
+      fi
+      echo "Posting status to Github"
+      curl -i -H "Authorization: Bearer ${TOKEN}" -H "Accept: application/vnd.github+json" \
+      https://api.github.com/repos/$(params.repo-full-name)/check-runs -d ${BODY}
+    volumeMounts:
+    - mountPath: /github-app-token
+      name: token
+  volumes:
+  - name: token
+    emptyDir: {}
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: unit-tests
+spec:
+  workspaces:
+  - name: source
+  steps:
+  - image: busybox
+    script: ls $(workspaces.source.path)
