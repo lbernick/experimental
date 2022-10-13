@@ -83,7 +83,7 @@ func newValidationAdmissionController(ctx context.Context, cmw configmap.Watcher
 	)
 }
 
-func newConcurrencyControlDefaultingAdmissionController(ctx context.Context, cmw configmap.Watcher) *controller.Impl {
+func newDefaultingAdmissionController(ctx context.Context, cmw configmap.Watcher) *controller.Impl {
 	var types = map[schema.GroupVersionKind]resourcesemantics.GenericCRD{
 		concurrencyControlKind: &v1alpha1.ConcurrencyControl{},
 	}
@@ -108,14 +108,11 @@ func newConcurrencyControlDefaultingAdmissionController(ctx context.Context, cmw
 	)
 }
 
-// TODO: This sets defaults based on PipelineRun.SetDefaults imported from Pipelines.
-// We will need to write our own admission webhook that only uses the callback
-// defined above.
-func newPipelineRunDefaultingAdmissionController(ctx context.Context, cmw configmap.Watcher) *controller.Impl {
+func newPipelineRunMutatingAdmissionController(ctx context.Context, cmw configmap.Watcher) *controller.Impl {
 	var types = map[schema.GroupVersionKind]resourcesemantics.GenericCRD{
 		pipelineRunKind: &v1beta1.PipelineRun{},
 	}
-	return defaulting.NewAdmissionController(ctx,
+	return NewAdmissionController(ctx,
 
 		// Name of the resource webhook.
 		"webhook.concurrency.custom.tekton.dev",
@@ -133,8 +130,6 @@ func newPipelineRunDefaultingAdmissionController(ctx context.Context, cmw config
 
 		// Whether to disallow unknown fields.
 		false,
-
-		map[schema.GroupVersionKind]defaulting.Callback{pipelineRunKind: c},
 	)
 }
 
@@ -162,7 +157,7 @@ func main() {
 	sharedmain.MainWithContext(ctx, WebhookLogKey,
 		certificates.NewController,
 		newValidationAdmissionController,
-		newPipelineRunDefaultingAdmissionController,
-		newConcurrencyControlDefaultingAdmissionController,
+		//newDefaultingAdmissionController,
+		newPipelineRunMutatingAdmissionController,
 	)
 }

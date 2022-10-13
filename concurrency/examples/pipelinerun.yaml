@@ -4,7 +4,7 @@ metadata:
   generateName: testme-
   labels:
     foo: bar
-  namespace: concurrency
+  #namespace: concurrency
 spec:
   params:
   - name: param1
