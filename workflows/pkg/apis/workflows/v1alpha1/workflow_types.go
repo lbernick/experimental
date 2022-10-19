@@ -50,7 +50,7 @@ func (*Workflow) GetGroupVersionKind() schema.GroupVersionKind {
 // WorkflowSpec describes the desired state of the Workflow
 type WorkflowSpec struct {
 	// Repos defines a set of Git repos required for this Workflow
-	// Repos   []Repo   `json:"repos,omitempty"`
+	Repos []Repo `json:"repos,omitempty"`
 
 	// Secrets defines any secrets that this Workflow needs
 	// Secrets []Secret `json:"secrets,omitempty"`
@@ -168,4 +168,26 @@ type Event struct {
 type EventSource struct {
 	// TBD, this struct should contain enough information to identify the source of the events
 	// To start with, we'd support push and pull request events from GitHub as well as Cron/scheduled events
+}
+
+// Should this set up a webhook for this repo? Or should it install a Github app on this repo?
+// What if you could do a local repo?
+type Repo struct {
+	Url string `json:"url"`
+	// only type "github" is supported for now
+	VCSType string `json:"vcsType,omitempty"`
+	// secret ref should be optional to support hosted solutions that want to do a login flow?
+	SecretRef triggersv1beta1.SecretRef `json:"secretRef,omitempty"`
+	// TODO (maybe): Extra fields to pass as parameters: things that are specific to the VCS type (e.g. ConnectionConfig)
+	// Maybe this is sort of like a resolver, where it can return some response to indicate that a connection
+	// has been set up? (e.g. might contain the webhook name?)
+	// When a Workflow is created with a Repo, it could make a Connection, and then we have some reconcilers responsible
+	// for implementing the Connection. You can write your own "connector". the connection can have a status "in progress" or something,
+	// not sure what it will do when it blocks.
+	// Or maybe the Repo CRD can just have a status instead of creating a separate CRD?
+	// This feels a lot like Flux CD. Maybe I could create a POC actually using flux CD?
+	// How does flux CD do events?
+	// The connection needs to know what events to listen for, probably, so it can configure the webhook.
+	// Alternatively filtering can just happen in the controller?
+	// https://fluxcd.io/flux/components/notification/receiver/#github-receiver
 }
