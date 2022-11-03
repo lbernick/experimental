@@ -1,10 +1,31 @@
 apiVersion: tekton.dev/v1alpha1
+kind: GitRepository
+metadata:
+  name: git-repo
+spec:
+  url: https://github.com/lbernick/web-app-demo
+  connector: github-webhook
+  customFields:
+    accessToken:
+      secretKeyRef:
+        name: knative-githubsecret
+        key: accessToken
+    secretToken:
+      secretKeyRef:
+        name: knative-githubsecret
+        key: secretToken
+---
+apiVersion: tekton.dev/v1alpha1
 kind: Workflow
 metadata:
   name: example-workflow
 spec:
+  repos:
+  - name: git-repo
   triggers:
   - event:
+      source:
+        repo: git-repo
       type: pull_request
     filters:
       gitRef:
@@ -20,7 +41,7 @@ spec:
           workspace: source
         params:
         - name: url
-          value: https://github.com/$(params.repo-full-name)
+          value: 
         - name: revision
           value: $(params.revision)
       - name: unit-tests

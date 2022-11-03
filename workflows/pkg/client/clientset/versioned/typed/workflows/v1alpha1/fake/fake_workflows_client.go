@@ -28,6 +28,10 @@ type FakeTektonV1alpha1 struct {
 	*testing.Fake
 }
 
+func (c *FakeTektonV1alpha1) GitRepositories(namespace string) v1alpha1.GitRepositoryInterface {
+	return &FakeGitRepositories{c, namespace}
+}
+
 func (c *FakeTektonV1alpha1) Workflows(namespace string) v1alpha1.WorkflowInterface {
 	return &FakeWorkflows{c, namespace}
 }
