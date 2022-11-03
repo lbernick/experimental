@@ -28,12 +28,17 @@ import (
 
 type TektonV1alpha1Interface interface {
 	RESTClient() rest.Interface
+	GitRepositoriesGetter
 	WorkflowsGetter
 }
 
 // TektonV1alpha1Client is used to interact with features provided by the tekton.dev group.
 type TektonV1alpha1Client struct {
 	restClient rest.Interface
+}
+
+func (c *TektonV1alpha1Client) GitRepositories(namespace string) GitRepositoryInterface {
+	return newGitRepositories(c, namespace)
 }
 
 func (c *TektonV1alpha1Client) Workflows(namespace string) WorkflowInterface {

@@ -51,7 +51,7 @@ func (*Workflow) GetGroupVersionKind() schema.GroupVersionKind {
 // WorkflowSpec describes the desired state of the Workflow
 type WorkflowSpec struct {
 	// Repos defines a set of Git repos required for this Workflow
-	// Repos   []Repo   `json:"repos,omitempty"`
+	Repos []string `json:"repos,omitempty"`
 
 	// Secrets defines any secrets that this Workflow needs
 	// Secrets []Secret `json:"secrets,omitempty"`

@@ -27,6 +27,17 @@ type Reconciler struct {
 var _ workflowsreconciler.Interface = (*Reconciler)(nil)
 
 func (r *Reconciler) ReconcileKind(ctx context.Context, w *v1alpha1.Workflow) reconciler.Event {
+	// TODO: check if repo exists and is done connecting
+	// TODO: how to requeue reconcile loop when repo is done connecting?
+	// TODO: add an interceptor to get events associated with this repo
+	return r.ReconcileTriggers(ctx, w)
+}
+
+func (r *Reconciler) ReconcileRepos(ctx context.Context, w *v1alpha1.Workflow) reconciler.Event {
+
+}
+
+func (r *Reconciler) ReconcileTriggers(ctx context.Context, w *v1alpha1.Workflow) reconciler.Event {
 	workflowTriggers, err := convert.ToTriggers(w)
 	if err != nil {
 		return controller.NewPermanentError(err)
