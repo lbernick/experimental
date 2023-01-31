@@ -17,7 +17,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8slabels "k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"knative.dev/pkg/controller"
@@ -89,9 +88,39 @@ func (r *Reconciler) ReconcileKind(ctx context.Context, pr *v1beta1.PipelineRun)
 	}
 	logger.Debugf("found %d concurrency controls in namespace %s", len(ccs), pr.Namespace)
 
+	var matchingCCs []*v1alpha1.ConcurrencyControl
+	var mismatchingCCs []*v1alpha1.ConcurrencyControl
+	var missingLabelsCCs []*v1alpha1.ConcurrencyControl
+
+	// If a concurrency control matches the PipelineRun, it should cancel other PipelineRuns in the same group
+	// during this reconcile loop.
+	// If the PipelineRun has different values for the labels specified in the concurrency control's label selector,
+	// the concurrency control isn't relevant to this PipelineRun.
+	// However, some labels may be added by a reconciler that runs concurrently.
+	// For example, the PipelineRun controller adds the label "tekton.dev/pipeline".
+	// If the concurrency control matches on this label and the PipelineRun doesn't have it,
+	// It's possible that this label will be added later.
+	// If no concurrency controls match, but some of them don't match *yet*,
+	// The PipelineRun won't be marked as having completed concurrency controls, and this controller will check again
+	// when the PipelineRun is re-reconciled.
+	// If some concurrency controls match, this doesn't work
+	// This is a bit of a hack because it may just result in reconciling the same PipelineRun many times but alas
+	for _, cc := range ccs {
+		if Matches(pr, cc) {
+			matchingCCs = append(matchingCCs, cc)
+		} else if allLabelsPresent(pr, cc) {
+			mismatchingCCs = append(mismatchingCCs, cc)
+		} else {
+			missingLabelsCCs = append(missingLabelsCCs, cc)
+		}
+	}
+
 	prsToCancel := sets.NewString()
 	var strategy v1alpha1.Strategy
 	for _, cc := range ccs {
+		// If a concurrency control matches the PipelineRun, cancel concurrent PipelineRuns in the same group.
+		// If it does not match the PipelineRun and all labels are present,
+
 		if !Matches(pr, cc) {
 			// Concurrency control does not apply to this PipelineRun
 			continue
@@ -133,6 +162,37 @@ func (r *Reconciler) ReconcileKind(ctx context.Context, pr *v1beta1.PipelineRun)
 	return r.updateLabelsAndStartPipelineRun(ctx, pr)
 }
 
+// allLabelsPresent returns True if the PipelineRun has all the labels
+// in cc.spec.selector.matchLabels and cc.spec.groupBy; false otherwise.
+func allLabelsPresent(pr *v1beta1.PipelineRun, cc *v1alpha1.ConcurrencyControl) bool {
+	presentLabels := k8slabels.Set(pr.Labels)
+	for k := range cc.Spec.Selector.MatchLabels {
+		if !presentLabels.Has(k) {
+			return false
+		}
+	}
+	return true
+}
+
+/*
+// getLabelSelector returns a label selector for PipelineRuns matching the ConcurrencyControl's selector
+// and that have values for the labels specified by the ConcurrencyControl's groupBy.
+func GetLabelSelector(cc *v1alpha1.ConcurrencyControl) (k8slabels.Selector, error) {
+	labelSelector := cc.Spec.Selector.MatchLabels
+	var requirements []k8slabels.Requirement
+	for _, key := range cc.Spec.GroupBy {
+		r, err := k8slabels.NewRequirement(key, selection.Exists, []string{})
+		if err != nil || r == nil {
+			return nil, fmt.Errorf("error building label selector")
+		}
+		requirements = append(requirements, *r)
+
+	}
+	out := k8slabels.SelectorFromSet(labelSelector)
+	out = out.Add(requirements...)
+	return out, nil
+} */
+
 // Matches returns true if the PipelineRun is selected by the ConcurrencyControl's selector.
 // An empty selector always matches the PipelineRun.
 func Matches(pr *v1beta1.PipelineRun, cc *v1alpha1.ConcurrencyControl) bool {
@@ -140,6 +200,7 @@ func Matches(pr *v1beta1.PipelineRun, cc *v1alpha1.ConcurrencyControl) bool {
 	return k8slabels.SelectorFromSet(cc.Spec.Selector.MatchLabels).Matches(k8slabels.Set(pr.Labels))
 }
 
+/*
 // getLabelSelector returns a label selector for PipelineRuns matching the ConcurrencyControl's selector
 // and that have the same value for the input PipelineRun's labels specified by the ConcurrencyControl's groupBy.
 // If the input PipelineRun does not have a value for the key specified by groupBy, the label selector returned
@@ -161,6 +222,24 @@ func getLabelSelector(cc *v1alpha1.ConcurrencyControl, pr *v1beta1.PipelineRun) 
 		} else {
 			labelSelector[key] = val
 		}
+	}
+	out := k8slabels.SelectorFromSet(labelSelector)
+	out = out.Add(requirements...)
+	return out, nil
+} */
+
+// getLabelSelector returns a label selector for PipelineRuns matching the ConcurrencyControl's selector
+// and that have the same value for the input PipelineRun's labels specified by the ConcurrencyControl's groupBy.
+// It returns an error if the input PipelineRun does not have a value for the key specified by groupBy.
+func getLabelSelector(cc *v1alpha1.ConcurrencyControl, pr *v1beta1.PipelineRun) (k8slabels.Selector, error) {
+	labelSelector := cc.Spec.Selector.MatchLabels
+	var requirements []k8slabels.Requirement
+	for _, key := range cc.Spec.GroupBy {
+		val, ok := pr.Labels[key]
+		if !ok {
+			return nil, fmt.Errorf("PipelineRun %s/%s missing label %s", pr.Namespace, pr.Name, val)
+		}
+		labelSelector[key] = val
 	}
 	out := k8slabels.SelectorFromSet(labelSelector)
 	out = out.Add(requirements...)
